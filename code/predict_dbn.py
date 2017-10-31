@@ -23,6 +23,7 @@ dropouts = [0.0, 0.0, 0.0, 0.0]
 batch_size = 128
 # num epochs to train for each hidden layer
 num_epoch = [100, 100, 100, 100]
+num_epochs_SGD = 1000
 nb_gibbs_steps = 10
 
 lr = 0.01
@@ -91,7 +92,7 @@ def main():
         dropouts=dropouts[1]
     )
 
-    rbms = [rbm1, rbm2, rbm3]
+    rbms = [rbm1, rbm2, rbm3, rbm4]
     dbn = DBN(rbms)
 
     # setup optimizer, loss
@@ -113,9 +114,15 @@ def main():
 
     # create the Keras inference model
     print('Creating Keras inference model...')
-    layers = dbn.get_forward_inference_layers()
+    Flayers = dbn.get_forward_inference_layers()
+    Blayers = dbn.get_backward_inference_layers()
+
     inference_model = Sequential()
-    for layer in layers:
+    for layer in Flayers:
+        inference_model.add(layer)
+        inference_model.add(SampleBernoulli(mode='random'))
+
+    for layer in Blayers[:-1]:
         inference_model.add(layer)
         inference_model.add(SampleBernoulli(mode='random'))
     # final layer takes in RBM 2k inputs and outputs + and - probabilities
@@ -124,6 +131,11 @@ def main():
     print('Finetuning parameters via SGD...')
     opt = SGD()
     inference_model.compile(opt, loss='binary_crossentropy')
+    h = inference_model.fit(X_train, Y_train,
+                batch_size=batch_size,
+                epochs=num_epochs_SGD,
+                verbose=1,
+                validation_data=(X_test, Y_test))
 
     print('Doing inference...')
     h = inference_model.predict(dataset)
