@@ -4,9 +4,12 @@ import numpy as np
 np.random.seed(1234) # set our RNG seed
 rng_seed = np.random.randint(2**30)
 
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import Dense
 from keras.optimizers import SGD
+
+from load_data import load_data
+from load_data_test import load_data_test
 
 from keras_extensions.logging import log_to_file
 from keras_extensions.rbm import RBM
@@ -15,27 +18,31 @@ from keras_extensions.layers import SampleBernoulli
 from keras_extensions.initializations import glorot_uniform_sigm
 
 # model parameters
-input_dim = 14564
-hidden_dim = [2000, 2000, 2000, 2000]
+input_dim = 10468
+hidden_dim = [400, 400, 400, 400]
 
 dropouts = [0.0, 0.0, 0.0, 0.0]
 
 batch_size = 128
 # num epochs to train for each hidden layer
-num_epoch = [100, 100, 100, 100]
-num_epochs_SGD = 1000
-nb_gibbs_steps = 10
+num_epoch = [50, 50, 50, 50]
+num_epochs_SGD = 100
+nb_gibbs_steps = 1
 
-lr = 0.01
+lr = 0.1
 
 @log_to_file('predict_dbn.log')
 def main():
-    # initialize our dataset
-    dataset = [0]
+    x, y = load_data()
+    x_t, y_t = load_data_test()
 
     # split into test and train
-    x_train
-    x_test
+    x_train = np.array(x)
+    x_test = np.array(x_t)
+    
+    y_train = np.array(y)
+    y_test = np.array(y_t)
+
 
     # setup model
     print('Creating training model...')
@@ -48,9 +55,9 @@ def main():
         visible_unit_type='binary',
         hidden_unit_type='binary',
         nb_gibbs_steps=nb_gibbs_steps,
-        persistent=True,
+        persistent=False,
         batch_size=batch_size,
-        dropouts=dropouts[0]
+        dropout=0.3
     )
 
     # hidden layer 1
@@ -61,9 +68,9 @@ def main():
         visible_unit_type='binary',
         hidden_unit_type='binary',
         nb_gibbs_steps=nb_gibbs_steps,
-        persistent=True,
+        persistent=False,
         batch_size=batch_size,
-        dropouts=dropouts[1]
+        dropout=0.3
     )
 
     # hidden layer 2
@@ -74,9 +81,9 @@ def main():
         visible_unit_type='binary',
         hidden_unit_type='binary',
         nb_gibbs_steps=nb_gibbs_steps,
-        persistent=True,
+        persistent=False,
         batch_size=batch_size,
-        dropouts=dropouts[1]
+        dropout=0.3
     )
 
     # hidden layer 3
@@ -87,19 +94,19 @@ def main():
         visible_unit_type='binary',
         hidden_unit_type='binary',
         nb_gibbs_steps=nb_gibbs_steps,
-        persistent=True,
+        persistent=False,
         batch_size=batch_size,
-        dropouts=dropouts[1]
+        dropout=0.3
     )
 
-    rbms = [rbm1, rbm2, rbm3, rbm4]
+    rbms = [rbm1, rbm2, rbm3]
     dbn = DBN(rbms)
 
     # setup optimizer, loss
     def get_layer_loss(rbm, layer_no):
         return rbm.contrastive_divergence_loss
     def get_layer_optimizer(layer_no):
-        return SGD((layer_no + 1) * lr, 0., decay=0.0, nesterov=False)
+        return SGD(lr, 0., decay=0.0, nesterov=True)
 
     metrics=[]
     for rbm in rbms:
@@ -110,37 +117,33 @@ def main():
 
     # pretrain greedily
     print('Training...')
-    dbn.fit(X_train, batch_size, num_epoch, verbose=1, shuffle=False)
+    dbn.fit(x_train, batch_size, num_epoch, verbose=1, shuffle=True)
 
     # create the Keras inference model
     print('Creating Keras inference model...')
     Flayers = dbn.get_forward_inference_layers()
-    Blayers = dbn.get_backward_inference_layers()
 
     inference_model = Sequential()
     for layer in Flayers:
         inference_model.add(layer)
-        inference_model.add(SampleBernoulli(mode='random'))
-
-    for layer in Blayers[:-1]:
-        inference_model.add(layer)
-        inference_model.add(SampleBernoulli(mode='random'))
     # final layer takes in RBM 2k inputs and outputs + and - probabilities
-    inference_model.add(Dense(2, input_dim=hidden_dim[3]))
+    inference_model.add(Dense(2, input_dim=hidden_dim[3], activation='softmax'))
 
+    inference_model.save('./model.h5')
+
+
+    # inference_model = load_model('./model.h5')
     print('Finetuning parameters via SGD...')
-    opt = SGD()
-    inference_model.compile(opt, loss='binary_crossentropy')
-    h = inference_model.fit(X_train, Y_train,
+    print(inference_model.summary())
+    inference_model.compile(optimizer='rmsprop', loss='binary_crossentropy')
+    inference_model.fit(x_train, y_train,
                 batch_size=batch_size,
-                epochs=num_epochs_SGD,
+                nb_epoch=num_epochs_SGD,
                 verbose=1,
-                validation_data=(X_test, Y_test))
+                validation_data=(x_test, y_test))
 
-    print('Doing inference...')
-    h = inference_model.predict(dataset)
-
-    print(h)
+    inference_model.save('./fine_tune_model.h5')
+    print('Final model saved!')
 
 if __name__ == '__main__':
     main()

@@ -1,13 +1,14 @@
 from propy import PyPro
 from Bio import SeqIO
 
-import numpy
+import pickle
 
 count = 0
 
-proteins = []
+proteins = {}
 
 for seq_record in SeqIO.parse('../data/experimental_protein.fasta', 'fasta'):
+    print(seq_record.name)
     des = PyPro.GetProDes(str(seq_record.seq))
     print(count)
     count += 1
@@ -17,6 +18,7 @@ for seq_record in SeqIO.parse('../data/experimental_protein.fasta', 'fasta'):
     TPComp = []
     for key, value in TPCompObj.iteritems():
         TPComp.append(value)
+
 
     # Dipeptide calculation
     DPCompObj = des.GetDPComp()
@@ -32,8 +34,7 @@ for seq_record in SeqIO.parse('../data/experimental_protein.fasta', 'fasta'):
 
     # Merge them to form protein sequence descriptor
     AAComp = AAComp + DPComp + TPComp
-    proteins.append(AAComp)
+    proteins[seq_record.name.replace('drugbank_target|', '', 1000)] = AAComp
 
-exported = numpy.asarray(proteins)
-numpy.savetxt('../data/experimental_protein_descriptors.csv', exported, delimiter=',')
+pickle.dump(proteins, open('../data/experimental_protein_descriptors.pkl', 'wb'))
 print('Saved descriptors')

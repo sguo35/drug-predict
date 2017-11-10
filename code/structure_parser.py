@@ -1,46 +1,24 @@
-from __future__ import print_function
-import openbabel as ob
-import pybel
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem import DataStructs
+import numpy as np
+import pickle
+ 
+mols = Chem.SDMolSupplier('../data/experimental_structures.sdf')
+act = [ ]
+fps = {}
+index = 0
 
-import numpy
 
-molecules = pybel.readfile('sdf', '../data/experimental_structures.sdf')
+for mol in mols:
+    if mol is None: continue
+    
+    print(mol.GetProp('DATABASE_ID'))
+    index += 1
+    arr = np.zeros( (1,) )
+    fp = AllChem.GetMorganFingerprintAsBitVect( mol, 6, nBits=2048 )
+    DataStructs.ConvertToNumpyArray( fp, arr )
+    fps[mol.GetProp('DATABASE_ID')] = arr.tolist()
 
-count = 0
-structArray = []
-
-for mol in molecules:
-    obmol = mol.OBMol
-    ob_fingerprint1 = ob.OBFingerprint.FindFingerprint("ECFP2")
-    fp1 = ob.vectorUnsignedInt()
-    ob_fingerprint1.GetFingerprint(obmol, fp1, 1024)
-
-    ob_fingerprint2 = ob.OBFingerprint.FindFingerprint("ECFP4")
-    fp2 = ob.vectorUnsignedInt()
-    ob_fingerprint2.GetFingerprint(obmol, fp2, 1024)
-
-    ob_fingerprint3 = ob.OBFingerprint.FindFingerprint("ECFP6")
-    fp3 = ob.vectorUnsignedInt()
-    ob_fingerprint3.GetFingerprint(obmol, fp3, 1024)
-    value1 = pybel.Fingerprint(fp1).bits
-    value2 = pybel.Fingerprint(fp2).bits
-    value3 = pybel.Fingerprint(fp3).bits
-
-    bit1 = [0] * 2048
-    bit2 = [0] * 2048
-    bit3 = [0] * 2048
-    for index in value1:
-        bit1[index - 1] = 1
-    for index in value2:
-        bit2[index - 1] = 1
-    for index in value3:
-        bit3[index - 1] = 1
-
-    bitArray = bit1 + bit2 + bit3
-    structArray.append(bitArray)
-    print(count)
-    count += 1
-
-exported = numpy.asarray(structArray)
-numpy.savetxt('../data/experimental_structures.csv', exported, delimiter=',')
+pickle.dump(fps, open('../data/experimental_structures.pkl', 'wb'))
 print('Saved structures')
