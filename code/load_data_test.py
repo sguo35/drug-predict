@@ -16,6 +16,8 @@ def load_data_test():
     # load drug target pairs
     pairs = np.loadtxt('../data/experimental_target_pairs.csv', delimiter=',', dtype=str)
 
+    min_max_scaler = pickle.load(open('./datasetScaler.pkl', 'rb'))
+
     # remove the labels from the pairs
     pairs = np.delete(pairs, [0,1], 0)
     print('Loaded drug target pairs...')
@@ -43,7 +45,7 @@ def load_data_test():
             drugList.append(drug)
             i += 1
         except:
-            print('Error')
+            continue
 
     # Generate negative data
     print('Generating negative data...')
@@ -52,17 +54,11 @@ def load_data_test():
         prot = random.choice(proteinList)
         drug = random.choice(drugList)
 
-        protein = proteins[prot]
-        drug = drugs[drug]
-        x = protein + drug
+        x = proteins[prot] + drugs[drug]
         y = [0,1]
         labeled_data_x.append(x)
         labeled_data_y.append(y)
         j += 1
 
     print('Generated data!')
-    min_max_scaler = MinMaxScaler()
-    return min_max_scaler.fit_transform(labeled_data_x), min_max_scaler.fit_transform(labeled_data_y)
-    
-
-load_data_test()
+    return min_max_scaler.transform(labeled_data_x), labeled_data_y

@@ -7,7 +7,7 @@ count = 0
 
 proteins = {}
 
-for seq_record in SeqIO.parse('../data/experimental_protein.fasta', 'fasta'):
+for seq_record in SeqIO.parse('../data/approved_protein.fasta', 'fasta'):
     print(seq_record.name)
     des = PyPro.GetProDes(str(seq_record.seq))
     print(count)
@@ -36,5 +36,5 @@ for seq_record in SeqIO.parse('../data/experimental_protein.fasta', 'fasta'):
     AAComp = AAComp + DPComp + TPComp
     proteins[seq_record.name.replace('drugbank_target|', '', 1000)] = AAComp
 
-pickle.dump(proteins, open('../data/experimental_protein_descriptors.pkl', 'wb'))
+pickle.dump(proteins, open('../data/approved_protein_descriptors.pkl', 'wb'), protocol=2)
 print('Saved descriptors')

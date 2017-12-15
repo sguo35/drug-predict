@@ -1,149 +1,52 @@
 from __future__ import division
 
 import numpy as np
-np.random.seed(1234) # set our RNG seed
-rng_seed = np.random.randint(2**30)
 
 from keras.models import Sequential, load_model
-from keras.layers import Dense
+from keras.layers import Dense, Dropout, BatchNormalization
 from keras.optimizers import SGD
+from keras import regularizers
 
 from load_data import load_data
 from load_data_test import load_data_test
 
-from keras_extensions.logging import log_to_file
-from keras_extensions.rbm import RBM
-from keras_extensions.dbn import DBN
-from keras_extensions.layers import SampleBernoulli
-from keras_extensions.initializations import glorot_uniform_sigm
+from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.model_selection import train_test_split
 
-# model parameters
-input_dim = 10468
-hidden_dim = [400, 400, 400, 400]
+np.random.seed(1337)  # for reproducibility
 
-dropouts = [0.0, 0.0, 0.0, 0.0]
+from dbn import SupervisedDBNClassification
+# use "from dbn import SupervisedDBNClassification" for computations on CPU with numpy
 
-batch_size = 128
-# num epochs to train for each hidden layer
-num_epoch = [50, 50, 50, 50]
-num_epochs_SGD = 100
-nb_gibbs_steps = 1
+# Loading dataset
+x, y = load_data()
+X = np.asarray(x, dtype='float32')
+Y = np.asarray(y, dtype='float32')
 
-lr = 0.1
+# Splitting data
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=0)
 
-@log_to_file('predict_dbn.log')
-def main():
-    x, y = load_data()
-    x_t, y_t = load_data_test()
+# Training
+classifier = SupervisedDBNClassification(hidden_layers_structure=[2000, 2000, 2000, 2000],
+                                         learning_rate_rbm=0.05,
+                                         learning_rate=0.1,
+                                         n_epochs_rbm=10,
+                                         n_iter_backprop=100,
+                                         batch_size=32,
+                                         activation_function='relu',
+                                         dropout_p=0.2,
+                                         verbose=True)
+classifier.fit(X_train, Y_train)
 
-    # split into test and train
-    x_train = np.array(x)
-    x_test = np.array(x_t)
-    
-    y_train = np.array(y)
-    y_test = np.array(y_t)
+# Save the model
+classifier.save('model.pkl')
 
+# Restore it
+classifier = SupervisedDBNClassification.load('model.pkl')
 
-    # setup model
-    print('Creating training model...')
-
-    # input layer
-    rbm1 = RBM(
-        hidden_dim[0], 
-        input_dim=input_dim, 
-        init=glorot_uniform_sigm,
-        visible_unit_type='binary',
-        hidden_unit_type='binary',
-        nb_gibbs_steps=nb_gibbs_steps,
-        persistent=False,
-        batch_size=batch_size,
-        dropout=0.3
-    )
-
-    # hidden layer 1
-    rbm2 = RBM(
-        hidden_dim[1], 
-        input_dim=hidden_dim[0], 
-        init=glorot_uniform_sigm,
-        visible_unit_type='binary',
-        hidden_unit_type='binary',
-        nb_gibbs_steps=nb_gibbs_steps,
-        persistent=False,
-        batch_size=batch_size,
-        dropout=0.3
-    )
-
-    # hidden layer 2
-    rbm3 = RBM(
-        hidden_dim[2], 
-        input_dim=hidden_dim[1], 
-        init=glorot_uniform_sigm,
-        visible_unit_type='binary',
-        hidden_unit_type='binary',
-        nb_gibbs_steps=nb_gibbs_steps,
-        persistent=False,
-        batch_size=batch_size,
-        dropout=0.3
-    )
-
-    # hidden layer 3
-    rbm4 = RBM(
-        hidden_dim[3], 
-        input_dim=hidden_dim[2], 
-        init=glorot_uniform_sigm,
-        visible_unit_type='binary',
-        hidden_unit_type='binary',
-        nb_gibbs_steps=nb_gibbs_steps,
-        persistent=False,
-        batch_size=batch_size,
-        dropout=0.3
-    )
-
-    rbms = [rbm1, rbm2, rbm3]
-    dbn = DBN(rbms)
-
-    # setup optimizer, loss
-    def get_layer_loss(rbm, layer_no):
-        return rbm.contrastive_divergence_loss
-    def get_layer_optimizer(layer_no):
-        return SGD(lr, 0., decay=0.0, nesterov=True)
-
-    metrics=[]
-    for rbm in rbms:
-        metrics.append([rbm.reconstruction_loss])
-
-    dbn.compile(layer_optimizer=get_layer_optimizer, layer_loss=get_layer_loss, metrics=metrics)
-
-
-    # pretrain greedily
-    print('Training...')
-    dbn.fit(x_train, batch_size, num_epoch, verbose=1, shuffle=True)
-
-    # create the Keras inference model
-    print('Creating Keras inference model...')
-    Flayers = dbn.get_forward_inference_layers()
-
-    inference_model = Sequential()
-    for layer in Flayers:
-        inference_model.add(layer)
-    # final layer takes in RBM 2k inputs and outputs + and - probabilities
-    inference_model.add(Dense(2, input_dim=hidden_dim[3], activation='softmax'))
-
-    inference_model.save('./model.h5')
-
-
-    # inference_model = load_model('./model.h5')
-    print('Finetuning parameters via SGD...')
-    print(inference_model.summary())
-    inference_model.compile(optimizer='rmsprop', loss='binary_crossentropy')
-    inference_model.fit(x_train, y_train,
-                batch_size=batch_size,
-                nb_epoch=num_epochs_SGD,
-                verbose=1,
-                validation_data=(x_test, y_test))
-
-    inference_model.save('./fine_tune_model.h5')
-    print('Final model saved!')
+# Test
+Y_pred = classifier.predict(X_test)
+print('Done.\nAccuracy: %f' % accuracy_score(Y_test, Y_pred))
 
 if __name__ == '__main__':
     main()
